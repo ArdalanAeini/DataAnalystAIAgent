@@ -9,6 +9,7 @@ import streamlit as st
 import openai
 import anthropic
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from openai import OpenAI
 

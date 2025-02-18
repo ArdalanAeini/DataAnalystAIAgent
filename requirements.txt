@@ -1,3 +1,6 @@
+# Python version requirement
+# python>=3.10
+
 numpy>=1.24.3
 pandas>=2.0.0
 streamlit>=1.31.0
@@ -7,4 +10,4 @@ python-dotenv>=1.0.0
 SQLAlchemy>=2.0.0
 faiss-cpu>=1.7.4
 pymysql>=1.1.0
-pickle5>=0.0.12 
+sentence-transformers>=2.2.2 
