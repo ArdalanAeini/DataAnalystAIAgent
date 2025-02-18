@@ -1,0 +1,8 @@
+Context,Rule,Description
+products,exclude_delivery_fees,When querying products always exclude items where products.delivery_service_fees = 1 as these represent delivery fees not actual products
+products,livraison_exclusion,The 'Livraison à domicile' entry in products table is a delivery fee (not a product) and should be excluded from product-related queries
+products,charge_by_weight,Products with charge_by_weight = 1 will have their final price adjusted based on actual weight
+product_stats,revenue_calculation,gross_revenue is not simply qty_sold * defined_retail_price due to dynamic pricing algorithm
+product_stats,availability_calculation,availability_percentage is availability_nb_times_was_available divided by availability_nb_checks
+orders,delivery_types,"For ww_orders, if it's a home delivery the name represents customer name, if pickup-point it represents pickup-point name"
+orders,delivery_delay_calculation,"For calculating delivery delays: 1) First check if revised_delivery_time > scheduled_delivery_time to identify if delivery was rescheduled, 2) Calculate actual delay as (real_delivery_time - scheduled_delivery_time). This helps track both schedule changes and actual delays. you should use orders table for accessing to these columns" x

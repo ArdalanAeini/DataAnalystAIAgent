@@ -1,0 +1,35 @@
+Source Table,Source Column,Target Table,Target Column,UPDATE_RULE,DELETE_RULE,Is_Required
+annie_exemptions,product_id,products,product_id,NO ACTION,NO ACTION,YES
+coupons,product_id,products,product_id,RESTRICT,RESTRICT,YES
+driver_break,route_id,ww_routes,route_id,NO ACTION,NO ACTION,YES
+droppoints,hd_product_id,products,product_id,RESTRICT,RESTRICT,YES
+favorites,product_id,products,product_id,CASCADE,CASCADE,NO
+inventory_status,product_id,products,product_id,CASCADE,CASCADE,NO
+load_basket_route_info,ww_route_id,ww_routes,route_id,RESTRICT,RESTRICT,YES
+marketplace_product_tag,marketplace_product_tag_product_id,products,product_id,NO ACTION,NO ACTION,NO
+prepbasket_buffer,product_id,products,product_id,RESTRICT,RESTRICT,NO
+price_scraper_list,psl_product_id,products,product_id,NO ACTION,NO ACTION,NO
+product_attributes,product_id,products,product_id,CASCADE,CASCADE,NO
+product_delivery_days,product_id,products,product_id,CASCADE,CASCADE,NO
+product_group_relations,parent_id,products,product_id,CASCADE,CASCADE,NO
+product_group_relations,child_id,products,product_id,CASCADE,CASCADE,NO
+product_sales,product_id,products,product_id,RESTRICT,RESTRICT,NO
+product_stats,product_id,products,product_id,RESTRICT,RESTRICT,YES
+productsLang,product_id,products,product_id,CASCADE,CASCADE,NO
+products_nutritional_values,product_id,products,product_id,NO ACTION,NO ACTION,NO
+products_nutritional_values_generated_by_ai,product_id,products,product_id,NO ACTION,NO ACTION,NO
+ratings,ww_step_id,ww_steps,step_id,RESTRICT,RESTRICT,YES
+scheduled_sfids,scheduled_sfid_product_id,products,product_id,NO ACTION,NO ACTION,NO
+submissions_logs,product_id,products,product_id,RESTRICT,RESTRICT,NO
+supplier_forecast_orders,product_id,products,product_id,RESTRICT,RESTRICT,NO
+task_type_portioning,product_id,products,product_id,RESTRICT,RESTRICT,NO
+uncompletable_logs,product_id,products,product_id,RESTRICT,RESTRICT,NO
+violations,ww_step_id,ww_steps,step_id,RESTRICT,RESTRICT,YES
+ww_orders,route_id,ww_routes,route_id,RESTRICT,RESTRICT,YES
+ww_orders,ww_territory_id,ww_territories,id,RESTRICT,RESTRICT,NO
+ww_orders,order_number,orders,order_id,RESTRICT,RESTRICT,YES
+ww_orders,drop_instance_id,drop_instance,drop_instance_id,RESTRICT,RESTRICT,YES
+ww_routes,operator_id,users,user_id,RESTRICT,RESTRICT,YES
+ww_routes,ww_territory_id,ww_territories,id,RESTRICT,RESTRICT,NO
+ww_steps,depot_id,ww_depots,depot_id,RESTRICT,RESTRICT,YES
+ww_steps,user_id,users,user_id,RESTRICT,RESTRICT,YES

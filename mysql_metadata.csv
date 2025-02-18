@@ -1,0 +1,171 @@
+Table Name,Column Name,Data Type,Null Allowed,Key,Default Value,Extra,Comment
+contract,modified_end_date,date,NO,,,,If overlapping contract created this is edited for easier queries
+driver_bonus_contract,modified_end_date,date,NO,,,,If overlapping bonus contract created this is edited for easier queries
+email_schedule,beanstalk_job_priority,int,NO,,2048,,Check possible values in main.php
+hr_applicant_linked_profiles,profile_type,tinyint(1),NO,,,,"0:Customers,1:Employee"
+hr_email_flows,email_type,tinyint,NO,,1,,"1:Hiring Stage, 2: Schedule Status"
+hr_employee_blacklists,type,tinyint,NO,MUL,,,"1:Applicant,2:Employee"
+hr_employee_contacts,contact_type,varchar(255),YES,,,,email or phone
+hr_employee_documents,file_format,tinyint,YES,,0,,1-document link:2-file upload
+hr_employee_documents,status,int,NO,,,,1-submitted:2:resubmitted:3:validated:4:removed:5:resubmitted_inactive:6:expired
+hr_employee_status_infos,document_id,tinyint,YES,,,,hr_employee_documents table
+hr_event_checklists,type,tinyint,NO,,1,,1-employee:2-applicant
+hr_event_checklists,contract_file_format,tinyint,NO,,0,,1-documentlink 2- file upload
+hr_event_guests,type,tinyint,NO,,1,,1-employee:2-applicant
+hr_event_guests,event_type,tinyint,NO,,1,,1-Event:2-Event series
+hr_events,type,int,NO,,,,"1: meeting, 2: series"
+hr_events,cutoff_type,tinyint,YES,,0,,"0:none,1:Days,2:Weeks"
+hr_user_tags,user_type,int,NO,,,,"Applicant-1 ,Employee-2"
+model_fields,requestable,tinyint(1),NO,,,,"no,yes"
+po_locations,location_type,tinyint,YES,,0,,0:lufa location 1:custom location
+po_notifications,is_important,tinyint,NO,,0,,"0-> Less Important, 1-> Important"
+portioning_packaging,packaging_price,float,NO,,,,"C'est un prix pour 1 unité. Par exemple, 1 prix compostable est de $0.049"
+productCategoriesLang,l_id,int,NO,PRI,,auto_increment,Primary key of this table
+productCategoriesLang,category_id,int,NO,MUL,,,Linked to product_categories.category_id
+productCategoriesLang,lang_id,varchar(10),NO,,,,"Language, ie : 'en' for english"
+productCategoriesLang,l_name,varchar(255),NO,,,,Translation of product_categories.name in the lang_id language
+productCategoriesLang,l_slug,varchar(255),NO,,,,Useless
+product_categories,category_id,int,NO,PRI,,auto_increment,Primary key of this table
+product_categories,name,varchar(255),YES,,,,Name of the product category in french
+product_categories,weight,int,YES,,0,,Used as an ordering value to know at which position on the marketplace this product category should appear
+product_categories,status,tinyint,NO,,1,,"1 = published/active, 0 = inactive/unpublished"
+product_categories,slug,varchar(255),NO,,,,Useless
+product_categories,product_categories_netsuite_id,int,YES,,,,TODO
+product_stats,product_stats_id,int,NO,PRI,,auto_increment,Primary key of this table
+product_stats,product_id,int,YES,MUL,,,Linked to products.product_id
+product_stats,supplier_id,smallint,YES,,,,Linked to suppliers.supplier_id
+product_stats,categ_id,smallint,YES,,,,Linked to product_categories.category_id
+product_stats,subcateg_id,smallint,YES,,,,Linked to productSubCategories.subcategory_id
+product_stats,subcategtype_id,smallint,YES,,,,Linked to productSubSubCategories.sub_sub_id
+product_stats,featured_flag,"enum('0','1')",YES,,0,,"If 1, the product was featured on the Marketplace for this given sales date, otherwise 0"
+product_stats,new_flag,"enum('0','1')",YES,,0,,"If 1, the product was appearing in the new section on the Marketplace for this given sales date, otherwise 0"
+product_stats,account_manager_id,int,YES,,,,Linked to users.user_id. This is the user/employee that was the manager of this product 
+product_stats,date,date,YES,MUL,,,Sales date
+product_stats,availability_nb_checks,smallint,NO,,0,,"As for a given 'Sales date', we allow the customer to start customizing his order 3 days in advance, we monitor each 30 minutes if each product is still available on the Marketplace. This number represent the number of checks we did."
+product_stats,availability_nb_times_was_available,smallint,NO,,0,,"As for a given 'Sales date', we allow the customer to start customizing his order 3 days in advance, we monitor each 30 minutes if each product is still available on the Marketplace. This number represent the number of times a check reported that the product was still available."
+product_stats,availability_percentage,"decimal(5,2)",NO,,0.00,,availability_percentage is availability_nb_times_was_available divided by availability_nb_checks
+product_stats,defined_retail_price,"decimal(14,6)",NO,,0.000000,,"This is the retail price per unit for that 'sales date'. For exemple, if usually the product price is 5$ and for this date we want it to be 2$, in defined_retail_price we will store 2."
+product_stats,default_retail_price,"decimal(14,6)",NO,,0.000000,,"This is the default price per unit. For exemple, if usually the product price is 5$ and for this date we want it to be 2$, in default_retail_price we will store 5."
+product_stats,default_retail_weight,smallint,NO,,0,,Product retail weight in g/ml
+product_stats,default_purchasing_price,"decimal(14,6)",NO,,0.000000,,This is the price we pay our supplier for this product per retail unit. It helps to calculate margin.
+product_stats,default_purchasing_weight,smallint,NO,,0,,Useless
+product_stats,qty_sold,mediumint,NO,MUL,0,,Represent the total number of units we sold on that date
+product_stats,qty_for_sales,mediumint,NO,,0,,"Our system has a non conventional way to determine the quantity that can be sold for a given date. If this value is 3000, it means the system perform calculation with what we had in inventory + quantities that will arrive before this 'sales date' - quantities already reserved by customers with an active order. If it's 0, that means the product was not on sale for that date. If this is any other values, this is the maximum quantity we want to sale for that date"
+product_stats,nb_orders_with_this_product,mediumint,NO,,0,,"Knowing that an order can contain multiple unit of a product, this is the number of distinct orders with this product"
+product_stats,inventory_out_qty,mediumint,NO,,0,,Useless
+product_stats,was_by_default_in_a_basket_design,smallint,NO,,0,,Useless
+product_stats,gross_revenue,"decimal(14,6)",NO,,0.000000,,"This is the total sales. Be carefull, it's not qty_sold * defined_retail_price because we have a dynamic pricing algo that may change the retail price of the product during the 3 days the marketplace is opened. "
+product_stats,cost,"decimal(14,6)",NO,,0.000000,,This is the sum of order_details.purchase_price_per_unit for each unit sold
+product_stats,sales_per_basket,"decimal(14,6)",NO,,0.000000,,Useless
+product_stats,gross_revenue_after_weight_adjustment,"decimal(14,6)",NO,,0.000000,,"Some products have the flag products.charge_by_weight = 1, it means the charge a price based on the default weight of the product, but then after weighting and packing the idem we adjust the price of the item "
+product_stats,default_weight_per_unit,"decimal(14,6)",NO,,0.000000,,same as default_retail_weight in theory
+product_stats,avg_real_weight_per_unit,"decimal(14,6)",NO,,0.000000,,average weight per unit if it was a charge by weight product
+product_stats,qty_sold_organic,mediumint,YES,,0,,Number of units sold without having the system pushing the product automatically in the customer order
+product_stats,qty_sold_with_prepop_method_bobb,int,YES,,0,,"When an order is created, the order is pre-filled with x $ of products. Depending of his settings. In this case 'Prepopulation based on basket builder', we may have push several units of this products in some orders. This is the number of units sold because they have been pushed automatically and the customer ordered them"
+product_stats,qty_sold_with_prepop_method_boph,int,YES,,0,,"When an order is created, the order is pre-filled with x $ of products. Depending of his settings. In this case 'Prepopulation based on purchase history', we may have push several units of this products in some orders. This is the number of units sold because they have been pushed automatically and the customer ordered them"
+product_stats,qty_placed_with_prepop_method_bobb,mediumint,YES,,0,,"When an order is created, the order is pre-filled with x $ of products. Depending of his settings. In this case 'Prepopulation based on basket builder', we may have push several units of this products in some orders. This is the number of units pushed automatically"
+product_stats,qty_placed_with_prepop_method_boph,mediumint,YES,,0,,"When an order is created, the order is pre-filled with x $ of products. Depending of his settings. In this case 'Prepopulation based on purchase history', we may have push several units of this products in some orders. This is the number of units pushed automatically"
+products,product_id,int,NO,PRI,,auto_increment,Primary key of this table
+products,crop_id,int,YES,,,,TODO
+products,crop_variety_id,int,NO,MUL,,,TODO
+products,supplier_id,int,YES,,,,Linked to suppliers.supplier_id
+products,name,varchar(255),YES,,,,Product name in french
+products,units,varchar(15),YES,,,,"Retail unit in french (link: sac, contenant, unitÃ©)"
+products,weight,varchar(15),YES,,,,Weight of a single unit in g/ml
+products,product_weight_with_packaging,int,NO,,,,TODO
+products,volume,int,NO,,1,,Volume in cm3 of one single retail unit
+products,price,"decimal(7,2)",YES,,,,Default retail price for a single unit
+products,packing_order,int,NO,,1,,TODO
+products,image_url,varchar(255),YES,,,,Path of the product picture to display on Marketplace
+products,status,tinyint,NO,MUL,0,,"Possible values are : STATUS_UNPUBLISHED = 0, STATUS_PUBLISHED = 1, STATUS_PENDING_MARKETING = 2, STATUS_PENDING_FINANCE = 3, STATUS_PENDING_APPROVAL = 4"
+products,seconds_needed_to_pack,int,NO,,5,,Useless
+products,featured,tinyint,NO,MUL,0,,TODO
+products,manipulation_needed,int,NO,,0,,"Indicate if we need to portion or not the product before or while packing. Possible values are 
+MANIPULATION_NEEDED_NONE = 0, MANIPULATION_NEEDED_BEFORE = 1, MANIPULATION_NEEDED_INLINE = 2, MANIPULATION_NEEDED_URGENT = 3"
+products,virtual,int,NO,MUL,0,,"if virtual is set to 1, then no packing required"
+products,delivery_service_fees,tinyint(1),YES,,0,,"If set to 1, this product is not packed. It's just a product that represent the delivery fees related to the customer order. If set to 0, it's a 'normal' product."
+products,charge_by_weight,int,NO,,0,,"If set to 1, it means we will charge the customer for the default retail price, but after packing the order, we will weight the product and adjust the billing accordingly"
+products,state_comment,varchar(255),YES,,,,Comment related to archived or rejected products
+products,disabled_date,date,YES,,,,Date when archived or rejected
+productsLang,l_id,int,NO,PRI,,auto_increment,Primary key of this table
+productsLang,product_id,int,NO,MUL,,,Linked to products.product_id
+productsLang,lang_id,varchar(10),NO,,,,Language 'en' for English
+productsLang,l_name,varchar(255),NO,MUL,,,Product name in the corresponding lang_id
+productsLang,l_units,varchar(15),NO,,,,TODO
+productsLang,l_description,text,YES,,,,TODO
+productsLang,l_slug,varchar(255),NO,,,,TODO
+productsLang,l_ingredient_list,text,YES,,,,TODO
+productsLang,l_suggested_description,text,YES,,,,TODO
+productsLang,l_suggested_name,varchar(255),YES,,,,TODO
+productsLang,l_manipulation_instructions,text,NO,,,,TODO
+productsLang,l_special_instructions_packer,varchar(255),NO,,,,TODO
+productsLang,l_reception_instructions,text,YES,,,,TODO
+purchase_orders,reception_status,int,NO,,1,,"1-reception pending,2-partially received 3 received"
+relays,token,char(23),YES,UNI,,,Unique Id For validation
+relays,link_id,int,YES,,,,Links Table FK
+request_comments,type,tinyint,NO,MUL,,,"request,rejected"
+requested_changes,state,tinyint,NO,MUL,,,"incomplete,completed,rejected"
+suppliers,purchasing_automation_status,smallint,YES,,0,,"Statuses
+0 - disabled
+1 - enabled"
+suppliers,purchasing_automation_autonomy_level,smallint,YES,,0,,"Autonomy levels
+0 - requires validation by lufa team
+1 - directs sfids on its own"
+task_type_role,role,varchar(255),NO,,,,linked to authitem2.name
+ww_orders,order_id,int,NO,PRI,,auto_increment,Primary key of this table
+ww_orders,ww_order_id,varchar(255),NO,,,,"By default, it's default unless this is a break (fake delivery) and in this case it will be break"
+ww_orders,name,varchar(255),YES,,,,"If this is a home delivery, it represent the first name and last name of order's customer. If this is a delivery at a pickup-point, it represent the name of the pickup-point, if it's a break, it's BREAK"
+ww_orders,phone,text,YES,,,,"If this is a home delivery, it represent the phone number linked to the order's customer. If this is a delivery at a pickup-point, it represent the phone number of the pickup-point "
+ww_orders,order_number,int,YES,MUL,,,"If this is a home delivery, it's the order_id that comes from the orders table"
+ww_orders,comment,text,YES,,,,This is the comment left by the customer / pickup point owner so the driver has clear instructions about the delivery 
+ww_orders,ww_territory_id,int,NO,MUL,,,Not used anymore
+ww_orders,drop_instance_id,int,YES,MUL,,,It's linked to drop_instance.drop_instance_id field. Prefilled only if this is a delivery done to a pickup point. Set to null if home delivery or break
+ww_orders,route_id,int,YES,MUL,,,It's linked to ww_routes.route_id. 
+ww_orders,box_to_pickup,int,YES,,0,,The number of empty boxes we may need to pickup at this location
+ww_orders,delivery_date,date,NO,MUL,,,The date of the delivery. It will be the same as the ww_routes.date
+ww_orders,box_picked_up,int,YES,,0,,"When a driver confirm the delivery, he also has to confirm the number of empty boxes he picked at this location"
+ww_orders,notified_incoming_delivery,tinyint,NO,,0,,"Flag set to 1 if the coordinator of the pickup point is notified that their delivery is arriving within 10 minutes, otherwise set to 0"
+ww_orders,notified_late_delivery,tinyint,NO,,0,,"Flag set to 1 if the coordinator of the pickup point was notified that their delivery was late by 10 minutes or more, otherwise set to 0"
+ww_routes,route_id,int,NO,PRI,,auto_increment,Primary key of this table
+ww_routes,ww_route_id,varchar(255),NO,,,,Useless
+ww_routes,date,date,NO,MUL,,,The date for this route and all the ww_orders and ww_steps associated
+ww_routes,vehicle_id,int,NO,MUL,,,Linked to ww_vehicles. vehicle_id (Vehicle used to do the pickups/deliveries on that route)
+ww_routes,driver_id,int,NO,,,,Driver assigned to this route. Linked to users.user_id
+ww_routes,ww_territory_id,int,NO,MUL,,,Useless
+ww_routes,basket_count,int,YES,,,,Not used anymore
+ww_routes,agent_id,int,YES,,,,Not used anymore
+ww_routes,ratio,float,YES,,,,Not used anymore
+ww_routes,penalty,int,YES,,,,Not used anymore
+ww_routes,operator_id,int,YES,MUL,,,Not used anymore
+ww_routes,target_ratio,float,NO,,0,,Not used anymore
+ww_routes,parent_route_id,int,YES,,,,"If the route has is_split = 1, it means the truck had an issue and we had to transfer some pickups/deliveries of that route into an other route. parent_route_id may contains ww_routes.route_id of the original route."
+ww_routes,is_split,tinyint(1),NO,,0,,"0 = route not split into 2 routes, 1 = route was split"
+ww_routes,reason,int,NO,,0,,TODO
+ww_routes,geometry_string,text,YES,,,,An encoding of the route with all steps 
+ww_steps,step_id,int,NO,PRI,,auto_increment,Primary key of this table
+ww_steps,order_id,int,NO,MUL,,,Linked to ww_orders.order_id
+ww_steps,arrival_sec,int,YES,,0,,TODO
+ww_steps,start_sec,int,YES,,0,,TODO
+ww_steps,end_sec,int,YES,,0,,TODO
+ww_steps,order,int,YES,,,,"It's an integer that represent the sequence of deliveries. negative values are pickups, positive values are deliveries"
+ww_steps,status,int,YES,,0,,"STATUS_DELIVERED = 1, STATUS_CANCELED = 2, STATUS_INCOMPLETE = 0"
+ww_steps,type,int,NO,MUL,,,"TYPE_DELIVERY = 0, TYPE_PICKUP = 1, TYPE_BREAK = 2"
+ww_steps,distance_to_next,int,YES,,,,Number of meters until next stop
+ww_steps,user_id,int,YES,MUL,,,"This is the driver in charge of this pickup/delivery, it's linked to users.user_id"
+ww_steps,time_to_next,int,YES,,0,,Number of travel seconds to reach next stop
+ww_steps,address,varchar(255),YES,,,,Postal address of this step (pickup/delivery)
+ww_steps,depot_id,int,YES,MUL,,,Not used anymore
+ww_steps,scheduled_datetime,datetime,YES,,0000-00-00 00:00:00,,"After the TMS created the route, this is the scheduled pickup/delivery time it forecasted"
+ww_steps,completed_datetime,datetime,YES,,0000-00-00 00:00:00,,This is the real time the driver completed this step
+ww_steps,revised_datetime,datetime,YES,,0000-00-00 00:00:00,,"In case the driver is slower or faster, we actualize the scheduled_datetime based on the speed of the driver"
+ww_steps,photo_url,varchar(255),YES,,,,"When a driver completed a step, he takes a photo. This is the URL to retrieve the photo"
+ww_steps,departed_datetime,datetime,YES,,,,It's the same as completed_datetime unless this step is linked to a Stationary drop-point. In this case the departed_datetime may be 2 hours after completed_datetime because the truck arrived at completed_datetime and had to stay at this location for 2 hours
+ww_steps,left_at_door,tinyint,YES,,0,,"0 = order not left at door, 1 = order left at door"
+ww_steps,limit_datetime,datetime,YES,,0000-00-00 00:00:00,,"Time limit to complete this step. If completed_datetime is greater than limit_datetime, it means the step was completed late."
+ww_steps,distance_from_previous,int,YES,,,,Opposite to distance_to_next
+ww_steps,time_from_previous,int,YES,,,,Opposite of time_to_next
+ww_steps,actual_time_from_previous,int,YES,,,,Difference in secondes between this completed_datetime and completed_datetime of the previous step
+ww_steps,return_distance,int,YES,,,,TODO
+ww_steps,sta_photo_url,varchar(255),YES,,,,"When it's a Stationary drop-point, the driver has to take a picture of the truck"
+ww_steps,is_photo_rejected,tinyint,NO,,0,,Useless
+ww_steps,logistics_notified,int,YES,,,,Useless
