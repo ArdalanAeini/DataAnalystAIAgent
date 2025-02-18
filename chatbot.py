@@ -32,11 +32,11 @@ def initialize_app():
         st.session_state.retry_count = 0  # For tracking refinement iterations
         st.session_state.context_top_k = 5  # initial top_k for similarity search
     return {
-        "host": os.getenv("DB_HOST"),
-        "port": os.getenv("DB_PORT"),
-        "user": os.getenv("DB_USER"),
-        "password": os.getenv("DB_PASSWORD"),
-        "database": os.getenv("DB_NAME")
+        "host": st.secrets["DB_HOST"] or os.getenv("DB_HOST"),
+        "port": st.secrets["DB_PORT"] or os.getenv("DB_PORT"),
+        "user": st.secrets["DB_USER"] or os.getenv("DB_USER"),
+        "password": st.secrets["DB_PASSWORD"] or os.getenv("DB_PASSWORD"),
+        "database": st.secrets["DB_NAME"] or os.getenv("DB_NAME")
     }
 
 #############################################
@@ -105,7 +105,7 @@ def get_condensed_schema(composite_schema):
 
 def get_embedding(text, model="text-embedding-ada-002"):
     """Get embedding from OpenAI API."""
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY"))
     text = text.replace("\n", " ")
     response = client.embeddings.create(
         input=[text],
