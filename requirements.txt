@@ -1,13 +1,13 @@
 # Python version requirement
-# python>=3.10
+# python>=3.12
 
-numpy>=1.24.3
-pandas>=2.0.0
-streamlit>=1.31.0
-openai>=1.12.0
-anthropic>=0.18.1
-python-dotenv>=1.0.0
-SQLAlchemy>=2.0.0
-faiss-cpu>=1.7.4
-pymysql>=1.1.0
-sentence-transformers>=2.2.2 
+numpy>=1.24.3,<2.0.0
+pandas>=2.0.0,<3.0.0
+streamlit>=1.31.0,<2.0.0
+openai>=1.12.0,<2.0.0
+anthropic>=0.18.1,<1.0.0
+python-dotenv>=1.0.0,<2.0.0
+SQLAlchemy>=2.0.0,<3.0.0
+faiss-cpu>=1.7.4,<2.0.0
+pymysql>=1.1.0,<2.0.0
+sentence-transformers>=2.2.2,<3.0.0 
