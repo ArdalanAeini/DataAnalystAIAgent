@@ -266,7 +266,7 @@ def get_relevant_rules(nl_query, context):
     
     return rules
 
-def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice, max_tokens=400):
+def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice, max_tokens=2000):
     """
     Generate a SQL query using the LLM.
     Uses a condensed schema to keep the prompt size within limits.
@@ -277,7 +277,76 @@ def generate_sql_query(nl_query, context, composite_schema, relationships, model
     relevant_rules = get_relevant_rules(nl_query, context)
     business_rules = "\n".join([f"{i+1}. {rule}" for i, rule in enumerate(relevant_rules)])
     
-    prompt = f"""Convert the following natural language query into a valid MySQL SQL query using only the provided schema.
+    # Check if this is a lateness query
+    is_lateness_query = any(word in nl_query.lower() for word in ['late', 'lateness', 'delay'])
+    
+    if is_lateness_query:
+        prompt = f"""You MUST generate a SQL query for a delivery lateness question using EXACTLY the template provided below.
+        
+STRICT TEMPLATE - You can ONLY modify:
+1. The date range in the INNER JOIN condition (BETWEEN "start_date" AND "end_date")
+2. The minute threshold in the WHERE clause TIME_TO_SEC calculation (the X in <= -(X*60))
+
+Template to follow EXACTLY (copy and paste this exactly, only replacing the date range and X value):
+SELECT 
+            ww_orders.delivery_date AS 'DELIVERY DATE',
+            IF(ww_orders.order_number>0, 
+            'HD', 
+            CASE
+                WHEN drop_instance.type=1 THEN 'PUP'
+                WHEN drop_instance.type=2 THEN 'PICKUP'
+                WHEN drop_instance.type=3 THEN 'EMBASSY'
+                WHEN drop_instance.type IS NULL THEN 'BREAK'
+            END
+            ) AS 'DELIVERY TYPE',
+            
+            CASE
+            WHEN ww_steps.status=1 THEN 'DONE'
+            WHEN ww_steps.status=2 THEN 'CANCELED'
+            WHEN ww_steps.status=0 THEN 'INCOMPLETED'
+            END AS 'DELIVERY STATUS',
+            IF(ww_orders.order_number>0, user_home_deliveries.city_name, droppoints.city_name) AS 'DELIVERY ADDRESS',
+            
+            ww_steps.limit_datetime AS 'TIME LIMIT FOR DELIVERY',
+            ww_steps.completed_datetime AS 'REAL DELIVERY TIME',
+            TIMEDIFF(ww_steps.limit_datetime,ww_steps.completed_datetime) AS 'DELIVERY LATENESS',
+            CASE
+                WHEN ww_steps.completed_datetime > ww_steps.limit_datetime AND (ww_orders.order_number > 0) THEN 'YES'
+                WHEN ww_steps.completed_datetime > ww_steps.limit_datetime AND (ww_orders.order_number IS NULL AND drop_instance.type IS NOT NULL) THEN 'YES'
+                ELSE 'NO'
+            END AS 'LATE',
+            TIME_TO_SEC(TIMEDIFF(ww_steps.limit_datetime,ww_steps.completed_datetime))
+        FROM 
+            ww_steps
+        INNER JOIN ww_orders ON (ww_orders.order_id = ww_steps.order_id AND ww_orders.delivery_date BETWEEN "start_date" AND "end_date") 
+        LEFT JOIN user_home_deliveries ON (user_home_deliveries.order_id = ww_orders.order_number)
+        LEFT JOIN drop_instance ON (drop_instance.drop_instance_id = ww_orders.drop_instance_id)
+        LEFT JOIN droppoints ON (droppoints.droppoint_id = drop_instance.droppoint_id)
+        WHERE
+            ww_steps.type IN (0,2) AND 
+            TIME_TO_SEC(TIMEDIFF(ww_steps.limit_datetime,ww_steps.completed_datetime)) <= -(X*60)
+
+        GROUP BY 
+            ww_steps.step_id
+        ORDER BY 
+            ww_orders.delivery_date,
+            ww_steps.order ASC
+
+IMPORTANT RULES:
+1. Use full table names (e.g., ww_steps, ww_orders) - DO NOT use aliases
+2. Use double quotes for date values ("YYYY-MM-DD")
+3. Keep all spacing and formatting exactly as shown
+4. The date range goes in the INNER JOIN condition with ww_orders
+5. The minute threshold goes in the WHERE clause TIME_TO_SEC calculation
+
+Natural language query: {nl_query}
+
+Generate the SQL query by using the template above and ONLY modifying:
+1. Replace "start_date" and "end_date" with the actual dates from the question (e.g., "2025-01-05" AND "2025-01-06")
+2. Replace X with the minute threshold from the question (e.g., 20 for 20 minutes)
+Do not change anything else - copy the template exactly and only replace those values."""
+    else:
+        prompt = f"""Convert the following natural language query into a valid MySQL SQL query using only the provided schema.
 
 Available Schema (condensed):
 {json.dumps(condensed_schema, indent=2)}
@@ -308,7 +377,7 @@ Return ONLY the SQL query with no markdown formatting or commentary.
             response = client.chat.completions.create(
                 model="gpt-4-turbo-preview",
                 messages=[
-                    {"role": "system", "content": "You are an expert SQL generator. Return only valid MySQL queries using the provided schema."},
+                    {"role": "system", "content": "You are an expert SQL generator. For lateness queries, you MUST use the exact template provided with only date and threshold modifications allowed."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=max_tokens
@@ -327,7 +396,7 @@ Return ONLY the SQL query with no markdown formatting or commentary.
         st.error(f"Error generating SQL: {str(e)}")
         return None
 
-def refine_sql_query(previous_query, error_message, context, composite_schema, relationships, model_choice, max_tokens=400):
+def refine_sql_query(previous_query, error_message, context, composite_schema, relationships, model_choice, max_tokens=2000):
     """
     Refine the SQL query based on error feedback.
     """
