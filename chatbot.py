@@ -157,7 +157,7 @@ def setup_faiss_index(df_schema):
             description += f" Additional properties: {extra_info}."
         
         if comment:
-            description += f" Purpose: {comment}"
+            description += f" Purpose of this column: {comment}"
         
         texts.append(description)
     
@@ -217,7 +217,7 @@ def get_relevant_context(query, embeddings, index, df_schema, top_k=5):
             description += f" Additional properties: {extra_info}."
         
         if comment:
-            description += f" Purpose: {comment}"
+            description += f" Purpose of this column: {comment}"
         
         contexts.append(description)
     
@@ -271,7 +271,69 @@ def get_relevant_rules(nl_query, context):
     
     return rules
 
-def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice="Claude 3.5 Sonnet", max_tokens=2000):
+def analyze_query_clarity(nl_query, context, composite_schema, relationships, model_choice, max_tokens=1000):
+    """
+    Analyze the natural language query for ambiguity and request clarification if needed.
+    Returns (needs_clarification, clarification_question)
+    """
+    condensed_schema = get_condensed_schema(composite_schema)
+    
+    prompt = f"""Analyze this natural language query and determine if any clarification is needed.
+If the query is clear and has all needed information, respond with "CLEAR: The query is clear."
+If clarification is needed, respond with "NEEDS_CLARIFICATION:" followed by a specific question to ask the user.
+
+Natural Language Query: {nl_query}
+
+Available Schema:
+{json.dumps(condensed_schema, indent=2)}
+
+Context:
+{context}
+
+Consider the following aspects:
+1. Time periods (if mentioned, are they specific enough?)
+2. Metrics or calculations (are they well defined?)
+3. Filtering conditions (are they specific enough?)
+4. Sorting/ordering (is the order clear?)
+5. Grouping (is it clear how to group the data?)
+6. Ambiguous terms (are all terms clearly mapped to database fields?)
+
+Provide ONLY one of these two response formats:
+CLEAR: The query is clear.
+or
+NEEDS_CLARIFICATION: <your specific question here>"""
+
+    try:
+        if model_choice == "O1 Reasoning Model":
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="o1",
+                messages=[
+                    {"role": "system", "content": "You are an expert at analyzing natural language queries for ambiguity and determining if clarification is needed."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_completion_tokens=max_tokens
+            )
+            result = response.choices[0].message.content.strip()
+        else:
+            anthro_client = anthropic.Anthropic(api_key=st.secrets["CLAUDE_API_KEY"] or os.getenv("CLAUDE_API_KEY"))
+            response = anthro_client.messages.create(
+                model="claude-3-opus-20240229",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens
+            )
+            result = response.content[0].text.strip()
+
+        if result.startswith("CLEAR:"):
+            return False, None
+        elif result.startswith("NEEDS_CLARIFICATION:"):
+            return True, result[len("NEEDS_CLARIFICATION:"):].strip()
+        return False, None
+    except Exception as e:
+        st.error(f"Error analyzing query clarity: {str(e)}")
+        return False, None
+
+def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice="Claude 3.5 Sonnet", max_tokens=2000, clarification_response=None):
     """
     Generate a SQL query using Claude.
     Uses a condensed schema to keep the prompt size within limits.
@@ -282,10 +344,10 @@ def generate_sql_query(nl_query, context, composite_schema, relationships, model
     relevant_rules = get_relevant_rules(nl_query, context)
     business_rules = "\n".join([f"{i+1}. {rule}" for i, rule in enumerate(relevant_rules)])
     
-    prompt = f"""IMPORTANT: This is a READ-ONLY interface. Your task is to convert the natural language query into a SELECT-only MySQL query. 
-Any data modification operations (INSERT, UPDATE, DELETE, etc.) are strictly forbidden.
-
-Convert the following natural language query into a READ-ONLY MySQL SQL query using only the provided schema.
+    # Include clarification in the prompt if provided
+    clarification_text = f"\nClarification provided: {clarification_response}" if clarification_response else ""
+    
+    prompt = f"""Convert the following natural language query into a MySQL SQL query using only the provided schema.
 
 Available Schema (condensed):
 {json.dumps(condensed_schema, indent=2)}
@@ -294,7 +356,7 @@ Relationships:
 {json.dumps(relationships, indent=2)}
 
 Context:
-{context}
+{context}{clarification_text}
 
 IMPORTANT BUSINESS RULES:
 {business_rules}
@@ -302,7 +364,7 @@ IMPORTANT BUSINESS RULES:
 Query: {nl_query}
 
 IMPORTANT TECHNICAL RULES:
-1. ONLY SELECT statements are allowed - no INSERT, UPDATE, DELETE, etc.
+1. Only use columns that exist in the provided schema
 2. ALWAYS use FULL table names (e.g., 'products.name', NOT 'p.name') - Table aliases are strictly forbidden
 3. Do not invent new column names
 4. Ensure proper joins based on the relationships
@@ -310,6 +372,11 @@ IMPORTANT TECHNICAL RULES:
 6. Example of correct table references:
    - Use: products.name, products.price, product_stats.qty_sold
    - DO NOT use: p.name, ps.qty_sold, etc.
+7. SAFETY MEASURES:
+   - DO NOT generate queries that modify tables (CREATE, ALTER, DROP, TRUNCATE)
+   - DO NOT generate queries that modify data (INSERT, UPDATE, DELETE)
+   - ONLY generate SELECT queries for data retrieval
+   - Any attempt to modify database structure or data is strictly forbidden
 
 Return ONLY the SQL query with no markdown formatting or commentary.
 """
@@ -424,6 +491,13 @@ def main():
     st.title("🌱 Lufa Farms Data Analyst AI Agent")
     db_config = initialize_app()
     
+    # Initialize session state for clarification
+    if 'awaiting_clarification' not in st.session_state:
+        st.session_state.awaiting_clarification = False
+        st.session_state.clarification_question = None
+        st.session_state.original_query = None
+        st.session_state.clarification_response = None
+    
     # Sidebar: model selection and explanation mode
     st.sidebar.title("Settings")
     st.session_state.explanation_mode = st.sidebar.checkbox("Show Query Details", value=False)
@@ -461,64 +535,63 @@ def main():
         key="nl_query"
     )
     
-    if st.button("Generate Query"):
+    # Add clarification input if needed
+    if st.session_state.awaiting_clarification:
+        st.info(st.session_state.clarification_question)
+        clarification_response = st.text_input("Please provide clarification:", key="clarification_input")
+        if st.button("Submit Clarification"):
+            st.session_state.clarification_response = clarification_response
+            st.session_state.awaiting_clarification = False
+            # Rerun with clarification
+            with st.spinner("Generating SQL query..."):
+                context = get_relevant_context(st.session_state.original_query, st.session_state.embeddings, st.session_state.index, st.session_state.df_schema)
+                sql_query = generate_sql_query(
+                    st.session_state.original_query,
+                    context,
+                    st.session_state.composite_schema,
+                    st.session_state.df_relationships,
+                    model_choice,
+                    clarification_response=clarification_response
+                )
+                if sql_query:
+                    st.session_state.sql_query = sql_query
+                    st.session_state.generated_context = context
+                    st.session_state.sql_generated = True
+    
+    elif st.button("Generate Query"):
         if nl_query.strip() and nl_query not in st.session_state.query_history:
             st.session_state.query_history.insert(0, nl_query)
             st.session_state.query_history = st.session_state.query_history[:10]
         
-        with st.spinner("Generating SQL query..."):
-            context = get_relevant_context(nl_query, st.session_state.embeddings, st.session_state.index, st.session_state.df_schema, top_k=st.session_state.context_top_k)
-            sql_query = generate_sql_query(
+        with st.spinner("Analyzing query..."):
+            context = get_relevant_context(nl_query, st.session_state.embeddings, st.session_state.index, st.session_state.df_schema)
+            needs_clarification, clarification_question = analyze_query_clarity(
                 nl_query,
                 context,
                 st.session_state.composite_schema,
                 st.session_state.df_relationships,
                 model_choice
             )
-            valid, message = validate_columns(sql_query, st.session_state.table_columns)
-            retry_count = 0
-            max_retries = 3
             
-            while not valid and retry_count < max_retries:
-                st.warning(f"Validation failed: {message}. Refining the query (Attempt {retry_count+1} of {max_retries})")
-                refined_query = refine_sql_query(
-                    sql_query,
-                    message,
-                    context,
-                    st.session_state.composite_schema,
-                    st.session_state.df_relationships,
-                    model_choice
-                )
-                if not refined_query:
-                    break
-                sql_query = refined_query
-                valid, message = validate_columns(sql_query, st.session_state.table_columns)
-                retry_count += 1
+            if needs_clarification:
+                st.session_state.awaiting_clarification = True
+                st.session_state.clarification_question = clarification_question
+                st.session_state.original_query = nl_query
+                st.rerun()
             
-            if not valid:
-                st.error(f"SQL query could not be refined after {max_retries} attempts: {message}.")
-                # Optionally, re-run similarity search with increased context (top_k)
-                st.warning("Refinement attempts failed. Re-running similarity search with more context...")
-                st.session_state.context_top_k = 10
-                context = get_relevant_context(nl_query, st.session_state.embeddings, st.session_state.index, st.session_state.df_schema, top_k=st.session_state.context_top_k)
-                sql_query = generate_sql_query(
-                    nl_query,
-                    context,
-                    st.session_state.composite_schema,
-                    st.session_state.df_relationships,
-                    model_choice
-                )
-                valid, message = validate_columns(sql_query, st.session_state.table_columns)
-                if not valid:
-                    st.error(f"SQL query could not be refined: {message}")
-                else:
-                    st.session_state.sql_query = sql_query
-                    st.session_state.generated_context = context
-                    st.session_state.sql_generated = True
             else:
-                st.session_state.sql_query = sql_query
-                st.session_state.generated_context = context
-                st.session_state.sql_generated = True
+                with st.spinner("Generating SQL query..."):
+                    sql_query = generate_sql_query(
+                        nl_query,
+                        context,
+                        st.session_state.composite_schema,
+                        st.session_state.df_relationships,
+                        model_choice
+                    )
+                    if sql_query:
+                        st.session_state.sql_query = sql_query
+                        st.session_state.generated_context = context
+                        st.session_state.sql_generated = True
     
     if st.session_state.sql_generated:
         if st.session_state.explanation_mode:
