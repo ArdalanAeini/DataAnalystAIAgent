@@ -271,53 +271,21 @@ def get_relevant_rules(nl_query, context):
     
     return rules
 
-def is_safe_query(query):
-    """
-    Check if the query is safe (read-only) by looking for modification keywords.
-    Returns (is_safe, message) tuple.
-    """
-    # Convert to uppercase for case-insensitive matching
-    query_upper = query.upper()
-    
-    # List of dangerous operations
-    dangerous_operations = [
-        'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE',
-        'RENAME', 'REPLACE', 'GRANT', 'REVOKE', 'LOCK', 'UNLOCK'
-    ]
-    
-    # Check for dangerous operations
-    for operation in dangerous_operations:
-        if operation in query_upper:
-            return False, f"Operation '{operation}' is not allowed. This is a read-only interface."
-    
-    # Ensure query starts with SELECT
-    if not query_upper.strip().startswith('SELECT'):
-        return False, "Only SELECT queries are allowed. This is a read-only interface."
-    
-    return True, "Query is safe"
-
 def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice="Claude 3.5 Sonnet", max_tokens=2000):
     """
     Generate a SQL query using Claude.
     Uses a condensed schema to keep the prompt size within limits.
     """
-    # First check if the natural language query suggests a modification operation
-    modification_keywords = ['insert', 'update', 'delete', 'modify', 'change', 'remove', 'add', 'create']
-    nl_query_lower = nl_query.lower()
-    
-    for keyword in modification_keywords:
-        if keyword in nl_query_lower:
-            st.error(f"Sorry, this interface is read-only. Queries containing '{keyword}' are not allowed.")
-            return None
-    
     condensed_schema = get_condensed_schema(composite_schema)
     
     # Get relevant business rules
     relevant_rules = get_relevant_rules(nl_query, context)
     business_rules = "\n".join([f"{i+1}. {rule}" for i, rule in enumerate(relevant_rules)])
     
-    prompt = f"""Convert the following natural language query into a READ-ONLY MySQL SQL query using only the provided schema.
-This interface is READ-ONLY - only SELECT statements are allowed.
+    prompt = f"""IMPORTANT: This is a READ-ONLY interface. Your task is to convert the natural language query into a SELECT-only MySQL query. 
+Any data modification operations (INSERT, UPDATE, DELETE, etc.) are strictly forbidden.
+
+Convert the following natural language query into a READ-ONLY MySQL SQL query using only the provided schema.
 
 Available Schema (condensed):
 {json.dumps(condensed_schema, indent=2)}
@@ -336,26 +304,25 @@ Query: {nl_query}
 IMPORTANT TECHNICAL RULES:
 1. ONLY SELECT statements are allowed - no INSERT, UPDATE, DELETE, etc.
 2. ALWAYS use FULL table names (e.g., 'products.name', NOT 'p.name') - Table aliases are strictly forbidden
-3. Only use columns that exist in the provided schema
-4. Do not invent new column names
-5. Ensure proper joins based on the relationships
-6. For subqueries, ensure column references are valid
-7. Example of correct table references:
+3. Do not invent new column names
+4. Ensure proper joins based on the relationships
+5. For subqueries, ensure column references are valid
+6. Example of correct table references:
    - Use: products.name, products.price, product_stats.qty_sold
    - DO NOT use: p.name, ps.qty_sold, etc.
 
 Return ONLY the SQL query with no markdown formatting or commentary.
 """
     try:
-        if model_choice == "ChatGPT Turbo":
+        if model_choice == "O1 Reasoning Model":
             client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model="o1",
                 messages=[
-                    {"role": "system", "content": "You are an expert SQL generator. Return only valid MySQL queries using the provided schema."},
+                    {"role": "system", "content": "You are an expert SQL generator with strong reasoning capabilities. Generate precise and efficient MySQL queries based on the schema and requirements provided."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=max_tokens
+                max_completion_tokens=max_tokens
             )
             sql_query = response.choices[0].message.content.strip()
         else:
@@ -367,13 +334,6 @@ Return ONLY the SQL query with no markdown formatting or commentary.
             )
             sql_query = response.content[0].text.strip()
         cleaned_query = extract_sql(sql_query)
-        
-        # Verify the generated query is safe
-        is_safe, message = is_safe_query(cleaned_query)
-        if not is_safe:
-            st.error(message)
-            return None
-            
         return cleaned_query
     except Exception as e:
         st.error(f"Error generating SQL: {str(e)}")
@@ -402,14 +362,15 @@ Context:
 Please refine and correct the SQL query. Return ONLY the corrected SQL query with no additional commentary.
 """
     try:
-        if model_choice == "ChatGPT Turbo":
-            response = openai.ChatCompletion.create(
-                model="gpt-4-turbo",
+        if model_choice == "O1 Reasoning Model":
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="o1",
                 messages=[
                     {"role": "system", "content": "You are an expert SQL generator. Correct the SQL query based on the feedback provided."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=max_tokens
+                max_completion_tokens=max_tokens
             )
             refined = response.choices[0].message.content.strip()
         else:
@@ -444,11 +405,6 @@ def execute_query(sql_query, db_config):
     """
     Execute the SQL query using SQLAlchemy.
     """
-    # First verify the query is safe
-    is_safe, message = is_safe_query(sql_query)
-    if not is_safe:
-        return None, message
-        
     try:
         engine = create_engine(
             f"mysql+pymysql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
@@ -471,7 +427,7 @@ def main():
     # Sidebar: model selection and explanation mode
     st.sidebar.title("Settings")
     st.session_state.explanation_mode = st.sidebar.checkbox("Show Query Details", value=False)
-    model_choice = st.sidebar.selectbox("Select Model", ["ChatGPT Turbo", "Claude 3.5 Sonnet"])
+    model_choice = st.sidebar.selectbox("Select Model", ["O1 Reasoning Model", "Claude 3.5 Sonnet"])
     
     # Load schema if not already initialized
     if not st.session_state.initialized:
