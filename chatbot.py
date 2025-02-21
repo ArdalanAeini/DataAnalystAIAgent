@@ -118,12 +118,17 @@ def setup_faiss_index(df_schema):
     FAISS_INDEX_PATH = "faiss_index.bin"
     EMBEDDINGS_PATH = "embeddings.pkl"
     
-    # Delete existing index files if they exist
-    if os.path.exists(FAISS_INDEX_PATH):
-        os.remove(FAISS_INDEX_PATH)
-    if os.path.exists(EMBEDDINGS_PATH):
-        os.remove(EMBEDDINGS_PATH)
+    # Try to load existing index and embeddings
+    if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(EMBEDDINGS_PATH):
+        try:
+            index = faiss.read_index(FAISS_INDEX_PATH)
+            with open(EMBEDDINGS_PATH, "rb") as f:
+                embeddings = pickle.load(f)
+            return embeddings, index
+        except Exception as e:
+            st.warning(f"Failed to load existing index files, creating new ones: {str(e)}")
     
+    # If we get here, either files don't exist or loading failed
     texts = []
     for _, row in df_schema.iterrows():
         # Create a natural language description of the column
@@ -266,18 +271,53 @@ def get_relevant_rules(nl_query, context):
     
     return rules
 
-def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice, max_tokens=400):
+def is_safe_query(query):
     """
-    Generate a SQL query using the LLM.
+    Check if the query is safe (read-only) by looking for modification keywords.
+    Returns (is_safe, message) tuple.
+    """
+    # Convert to uppercase for case-insensitive matching
+    query_upper = query.upper()
+    
+    # List of dangerous operations
+    dangerous_operations = [
+        'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE',
+        'RENAME', 'REPLACE', 'GRANT', 'REVOKE', 'LOCK', 'UNLOCK'
+    ]
+    
+    # Check for dangerous operations
+    for operation in dangerous_operations:
+        if operation in query_upper:
+            return False, f"Operation '{operation}' is not allowed. This is a read-only interface."
+    
+    # Ensure query starts with SELECT
+    if not query_upper.strip().startswith('SELECT'):
+        return False, "Only SELECT queries are allowed. This is a read-only interface."
+    
+    return True, "Query is safe"
+
+def generate_sql_query(nl_query, context, composite_schema, relationships, model_choice="Claude 3.5 Sonnet", max_tokens=2000):
+    """
+    Generate a SQL query using Claude.
     Uses a condensed schema to keep the prompt size within limits.
     """
+    # First check if the natural language query suggests a modification operation
+    modification_keywords = ['insert', 'update', 'delete', 'modify', 'change', 'remove', 'add', 'create']
+    nl_query_lower = nl_query.lower()
+    
+    for keyword in modification_keywords:
+        if keyword in nl_query_lower:
+            st.error(f"Sorry, this interface is read-only. Queries containing '{keyword}' are not allowed.")
+            return None
+    
     condensed_schema = get_condensed_schema(composite_schema)
     
     # Get relevant business rules
     relevant_rules = get_relevant_rules(nl_query, context)
     business_rules = "\n".join([f"{i+1}. {rule}" for i, rule in enumerate(relevant_rules)])
     
-    prompt = f"""Convert the following natural language query into a valid MySQL SQL query using only the provided schema.
+    prompt = f"""Convert the following natural language query into a READ-ONLY MySQL SQL query using only the provided schema.
+This interface is READ-ONLY - only SELECT statements are allowed.
 
 Available Schema (condensed):
 {json.dumps(condensed_schema, indent=2)}
@@ -294,17 +334,21 @@ IMPORTANT BUSINESS RULES:
 Query: {nl_query}
 
 IMPORTANT TECHNICAL RULES:
-1. Always qualify column names with their table names (e.g., table_name.column_name)
-2. Only use columns that exist in the provided schema
-3. Do not invent new column names
-4. Ensure proper joins based on the relationships
-5. For subqueries, ensure column references are valid
+1. ONLY SELECT statements are allowed - no INSERT, UPDATE, DELETE, etc.
+2. ALWAYS use FULL table names (e.g., 'products.name', NOT 'p.name') - Table aliases are strictly forbidden
+3. Only use columns that exist in the provided schema
+4. Do not invent new column names
+5. Ensure proper joins based on the relationships
+6. For subqueries, ensure column references are valid
+7. Example of correct table references:
+   - Use: products.name, products.price, product_stats.qty_sold
+   - DO NOT use: p.name, ps.qty_sold, etc.
 
 Return ONLY the SQL query with no markdown formatting or commentary.
 """
     try:
         if model_choice == "ChatGPT Turbo":
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
                 model="gpt-4-turbo-preview",
                 messages=[
@@ -315,14 +359,22 @@ Return ONLY the SQL query with no markdown formatting or commentary.
             )
             sql_query = response.choices[0].message.content.strip()
         else:
-            anthro_client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
+            anthro_client = anthropic.Anthropic(api_key=st.secrets["CLAUDE_API_KEY"] or os.getenv("CLAUDE_API_KEY"))
             response = anthro_client.messages.create(
                 model="claude-3-opus-20240229",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens
             )
             sql_query = response.content[0].text.strip()
-        return extract_sql(sql_query)
+        cleaned_query = extract_sql(sql_query)
+        
+        # Verify the generated query is safe
+        is_safe, message = is_safe_query(cleaned_query)
+        if not is_safe:
+            st.error(message)
+            return None
+            
+        return cleaned_query
     except Exception as e:
         st.error(f"Error generating SQL: {str(e)}")
         return None
@@ -392,8 +444,15 @@ def execute_query(sql_query, db_config):
     """
     Execute the SQL query using SQLAlchemy.
     """
+    # First verify the query is safe
+    is_safe, message = is_safe_query(sql_query)
+    if not is_safe:
+        return None, message
+        
     try:
-        engine = create_engine(f"mysql+pymysql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}")
+        engine = create_engine(
+            f"mysql+pymysql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+        )
         with engine.connect() as conn:
             result = conn.execute(text(sql_query))
             df_results = pd.DataFrame(result.fetchall(), columns=result.keys())
